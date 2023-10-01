@@ -1,0 +1,5 @@
+commands:
+  - commandline: "./foo.sh"
+    title: First command
+  - commandline: "./foo.sh"
+    title: Second command

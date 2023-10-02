@@ -59,11 +59,11 @@ program
       await waitForSpawn;
       console.log(`Finished spawn: ${command.commandline}`);
       panes.push({
-        title: command.title,
+        title: command.title ?? command.commandline,
         stream: subproc.all!
       });
     }
-    render(<Punchdeck panes={panes} />);
+    render(<Punchdeck panes={panes} maxHistory={1000} />);
   });
 
 program.parse(process.argv);

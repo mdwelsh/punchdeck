@@ -24,12 +24,12 @@ export function useStdoutDimensions(): [number, number] {
 
 function StatusBar({ paused }: { paused: boolean }) {
   return (
-    <Box padding={1} width="100%" height={1}>
+    <Box padding={0} width="100%" height={1}>
       <Text>
-        <Text color="green">hjkl</Text> to select,{' '}
-        <Text color="green">tab</Text> to focus,{' '}
-        <Text color="green">c</Text> to collapse,{' '}
-        <Text color="green">q</Text> to quit.
+        <Text color="green">j/k</Text> to select,{" "}
+        <Text color="green">up/down</Text> to scroll,{" "}
+        <Text color="green">tab</Text> to focus, <Text color="green">c</Text> to
+        collapse, <Text color="green">q</Text> to quit.
       </Text>
       <Text color="yellow">{paused ? " [Paused] " : ""}</Text>
     </Box>
@@ -42,8 +42,8 @@ const useStreamData = (
   maxHistory?: number
 ) => {
   const dataRef = useRef<string[]>([]);
+  const [returnData, setReturnData] = useState<string[]>([]);
   const currentLineRef = useRef<string>("");
-  const [, forceUpdate] = useReducer((x) => x + 1, 0); // Function to force re-render
 
   useEffect(() => {
     const handleData = (chunk: string) => {
@@ -57,7 +57,7 @@ const useStreamData = (
         }
         dataRef.current.push(line);
         if (!paused) {
-          forceUpdate();
+          setReturnData([...dataRef.current]);
         }
       }
       currentLineRef.current = currentLineData;
@@ -67,7 +67,14 @@ const useStreamData = (
       stream.off("data", handleData);
     };
   }, [stream, paused]);
-  return dataRef.current;
+
+  useEffect(() => {
+    if (!paused) {
+      setReturnData([...dataRef.current]);
+    }
+  }, [paused]);
+
+  return returnData;
 };
 
 export interface PunchdeckPane {
@@ -84,6 +91,7 @@ function Pane({
   paused,
   collapsed,
   hidden,
+  last,
   maxHistory,
 }: {
   columns: number;
@@ -94,29 +102,39 @@ function Pane({
   paused: boolean;
   collapsed: boolean;
   hidden: boolean;
+  last: number;
   maxHistory?: number;
 }) {
   const streamData = useStreamData(stream, paused, maxHistory);
 
   useEffect(() => {}, [streamData]);
 
+  const startIndex = Math.max(0, streamData.length - (rows - 2) + last);
+  const endIndex = Math.max(0, startIndex + (rows - 2));
+
   return hidden ? null : (
     <Box
       borderStyle="round"
-      borderColor={selected ? "green" : "blue"}
+      borderColor={selected ? "green" : "dim"}
       flexDirection="column"
       width={columns}
       height={collapsed ? 3 : rows}
-      overflow="hidden"
+      overflowX="hidden"
+      overflowY="visible"
     >
-      <Box>
+      <Box marginTop={-1}>
         <Spacer />
         <Text color={selected ? "green" : "dim"}>
           {selected ? "▶" : " "}
           {title}
         </Text>
       </Box>
-      {!collapsed && <Text>{streamData.slice(-rows).join("\n")}</Text>}
+      {/* {!collapsed && <Text>{streamData.slice(-rows).join("\n")}</Text>} */}
+      {/* <Text>startIndex: {startIndex}</Text><Newline /> */}
+      {/* <Text>endIndex: {endIndex}</Text><Newline /> */}
+      {!collapsed && (
+        <Text>{streamData.slice(startIndex, endIndex).join("\n")}</Text>
+      )}
     </Box>
   );
 }
@@ -131,25 +149,35 @@ export function Punchdeck({ panes, maxHistory }: PunchdeckProps) {
   const [columns, rows] = useStdoutDimensions();
   const [selected, setSelected] = useState(0);
   const [collapsed, setCollapsed] = useState<boolean[]>(panes.map(() => false));
+  const [lastLine, setLastLine] = useState<number[]>(panes.map(() => 0));
   const [focused, setFocused] = useState(-1);
 
   useInput((input: any, key: any) => {
     if (input === " ") {
+      if (paused) {
+        setLastLine(panes.map(() => 0));
+      }
       setPaused(!paused);
     } else if (input === "q") {
       process.exit();
-    } else if (input === "k" || key.upArrow) {
+    } else if (input === "k") {
       const newSelected = (selected + panes.length - 1) % panes.length;
       setSelected(newSelected);
       if (focused !== -1) {
         setFocused(newSelected);
       }
-    } else if (input === "j" || key.downArrow) {
+    } else if (input === "j") {
       const newSelected = (selected + 1) % panes.length;
       setSelected(newSelected);
       if (focused !== -1) {
         setFocused(newSelected);
       }
+    } else if (key.upArrow) {
+      let curLastLine = lastLine[selected] - 1;
+      setLastLine(lastLine.map((c, i) => (i === selected ? curLastLine : c)));
+    } else if (key.downArrow) {
+      let curLastLine = Math.min(0, lastLine[selected] + 1);
+      setLastLine(lastLine.map((c, i) => (i === selected ? curLastLine : c)));
     } else if (input === "c") {
       setCollapsed(collapsed.map((c, i) => (i === selected ? !c : c)));
     } else if (key.tab && focused === -1) {
@@ -176,6 +204,7 @@ export function Punchdeck({ panes, maxHistory }: PunchdeckProps) {
           stream={pane.stream!}
           selected={index === selected}
           maxHistory={maxHistory}
+          last={lastLine[index]}
           paused={paused}
           hidden={focused !== -1 && focused !== index}
           collapsed={focused === -1 && collapsed[index]}

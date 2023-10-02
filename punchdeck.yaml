@@ -1,4 +1,5 @@
 commands:
   - commandline: "./foo.sh 1"
+    title: "Backend"
   - commandline: "./foo.sh 2"
   - commandline: "./foo.sh 3"
